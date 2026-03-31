@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tafels Trainer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f4f8;
+            color: #333;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .controls label {
+            font-weight: 600;
+        }
+
+        .controls input[type="number"] {
+            width: 70px;
+            padding: 6px 10px;
+            border: 2px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .controls button {
+            padding: 10px 24px;
+            background: #3182ce;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .controls button:hover {
+            background: #2b6cb0;
+        }
+
+        .game-layout {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+
+        th, td {
+            width: 72px;
+            height: 60px;
+            text-align: center;
+            border: 1px solid #cbd5e0;
+            font-size: 22px;
+            font-weight: 500;
+        }
+
+        th {
+            background: #2c3e50;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        th.corner {
+            background: #1a202c;
+            font-size: 26px;
+        }
+
+        td {
+            background: #fff;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        td.hidden-cell {
+            background: #e2e8f0;
+            color: #e2e8f0;
+        }
+
+        td.highlighted {
+            background: #fefcbf;
+            outline: 3px solid #d69e2e;
+            outline-offset: -2px;
+            color: #fefcbf;
+            font-weight: 700;
+            transform: scale(1.05);
+            z-index: 1;
+            position: relative;
+        }
+
+        td.correct {
+            background: #c6f6d5;
+            color: #22543d;
+            font-weight: 700;
+        }
+
+        td.wrong {
+            background: #fed7d7;
+            color: #9b2c2c;
+            font-weight: 700;
+        }
+
+        .quiz-area {
+            min-width: 320px;
+            padding: 14px 24px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .quiz-area.hidden {
+            display: none;
+        }
+
+        .quiz-progress {
+            font-size: 14px;
+            color: #718096;
+            margin-bottom: 4px;
+        }
+
+        .quiz-question {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .quiz-input-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .quiz-input-row input[type="number"] {
+            width: 120px;
+            padding: 10px 14px;
+            border: 2px solid #cbd5e0;
+            border-radius: 8px;
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .quiz-input-row input[type="number"]:focus {
+            outline: none;
+            border-color: #3182ce;
+        }
+
+        .quiz-input-row button {
+            padding: 10px 24px;
+            background: #38a169;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .quiz-input-row button:hover {
+            background: #2f855a;
+        }
+
+        .quiz-feedback {
+            margin-top: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            min-height: 28px;
+        }
+
+        .quiz-feedback.correct {
+            color: #22543d;
+        }
+
+        .quiz-feedback.wrong {
+            color: #9b2c2c;
+        }
+
+        .quiz-summary {
+            margin-top: 16px;
+            font-size: 20px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        .history-section {
+            max-width: 600px;
+            margin: 24px auto 0;
+            padding: 16px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .history-section.hidden {
+            display: none;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .history-header h2 {
+            font-size: 18px;
+            color: #2c3e50;
+        }
+
+        .history-header button {
+            padding: 4px 12px;
+            background: #e53e3e;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .history-header button:hover {
+            background: #c53030;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th, .history-table td {
+            width: auto;
+            height: auto;
+            padding: 6px 10px;
+            font-size: 14px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .history-table th {
+            background: #edf2f7;
+            color: #2c3e50;
+            font-size: 13px;
+        }
+
+        .history-table td.perfect { color: #22543d; font-weight: 700; }
+        .history-table td.good { color: #2b6cb0; font-weight: 600; }
+        .history-table td.poor { color: #9b2c2c; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <h1>Tafels Trainer</h1>
+
+    <div class="controls">
+        <label for="maxTable">Tafels tot:</label>
+        <input type="number" id="maxTable" value="10" min="2" max="20">
+
+        <label for="hidePercent">Verborgen (%):</label>
+        <input type="number" id="hidePercent" value="30" min="5" max="100" step="5">
+
+        <button onclick="startGame()">Start!</button>
+    </div>
+
+    <div class="game-layout">
+    <div class="table-container">
+        <table id="grid"></table>
+    </div>
+
+    <div class="quiz-area hidden" id="quizArea">
+        <div class="quiz-progress" id="quizProgress"></div>
+        <div class="quiz-question" id="quizQuestion"></div>
+        <div class="quiz-input-row" id="quizInputRow">
+            <input type="number" id="quizAnswer" placeholder="?" autofocus>
+            <button onclick="submitAnswer()">OK</button>
+        </div>
+        <div class="quiz-feedback" id="quizFeedback"></div>
+        <div class="quiz-summary hidden" id="quizSummary"></div>
+    </div>
+    </div>
+
+    <div class="history-section hidden" id="historySection">
+        <div class="history-header">
+            <h2>Geschiedenis</h2>
+        </div>
+        <table class="history-table">
+            <thead>
+                <tr><th>Datum</th><th>Tafels</th><th>Verborgen</th><th>Score</th></tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let hiddenCells = [];
+        let quizCells = [];
+        let currentQuestion = 0;
+        let score = 0;
+        let answering = false;
+
+        // Load saved settings
+        const savedSettings = JSON.parse(localStorage.getItem('tafels-settings') || '{}');
+        if (savedSettings.maxTable) document.getElementById('maxTable').value = savedSettings.maxTable;
+        if (savedSettings.hidePercent) document.getElementById('hidePercent').value = savedSettings.hidePercent;
+
+        renderHistory();
+
+        function saveSettings(maxTable, hidePercent) {
+            localStorage.setItem('tafels-settings', JSON.stringify({ maxTable, hidePercent }));
+        }
+
+        function saveScore(maxTable, hidePercent, score, total) {
+            const history = JSON.parse(localStorage.getItem('tafels-history') || '[]');
+            history.push({
+                date: new Date().toLocaleString('nl-NL'),
+                maxTable,
+                hidePercent,
+                score,
+                total
+            });
+            // Keep last 20 results
+            if (history.length > 20) history.splice(0, history.length - 20);
+            localStorage.setItem('tafels-history', JSON.stringify(history));
+        }
+
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem('tafels-history') || '[]');
+            const container = document.getElementById('historyBody');
+            container.innerHTML = '';
+
+            if (history.length === 0) {
+                document.getElementById('historySection').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('historySection').classList.remove('hidden');
+
+            // Show most recent first
+            for (let i = history.length - 1; i >= 0; i--) {
+                const h = history[i];
+                const tr = document.createElement('tr');
+                const pct = Math.round(h.score / h.total * 100);
+                tr.innerHTML = `<td>${h.date}</td><td>${h.maxTable}</td><td>${h.hidePercent}%</td><td class="${pct === 100 ? 'perfect' : pct >= 70 ? 'good' : 'poor'}">${h.score} / ${h.total}</td>`;
+                container.appendChild(tr);
+            }
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('tafels-history');
+            renderHistory();
+        }
+
+        function startGame() {
+            const maxTable = parseInt(document.getElementById('maxTable').value);
+            const hidePercent = parseInt(document.getElementById('hidePercent').value);
+
+            saveSettings(maxTable, hidePercent);
+            buildGrid(maxTable);
+            hideRandomCells(maxTable, hidePercent);
+            startQuiz();
+        }
+
+        function buildGrid(maxTable) {
+            const table = document.getElementById('grid');
+            table.innerHTML = '';
+
+            // Header row
+            const headerRow = document.createElement('tr');
+            const corner = document.createElement('th');
+            corner.textContent = '\u00d7';
+            corner.className = 'corner';
+            headerRow.appendChild(corner);
+
+            for (let col = 1; col <= 10; col++) {
+                const th = document.createElement('th');
+                th.textContent = col;
+                headerRow.appendChild(th);
+            }
+            table.appendChild(headerRow);
+
+            // Data rows
+            for (let row = 1; row <= maxTable; row++) {
+                const tr = document.createElement('tr');
+                const rowHeader = document.createElement('th');
+                rowHeader.textContent = row;
+                tr.appendChild(rowHeader);
+
+                for (let col = 1; col <= 10; col++) {
+                    const td = document.createElement('td');
+                    td.textContent = row * col;
+                    td.id = `cell-${row}-${col}`;
+                    td.dataset.row = row;
+                    td.dataset.col = col;
+                    tr.appendChild(td);
+                }
+                table.appendChild(tr);
+            }
+        }
+
+        function hideRandomCells(maxTable, hidePercent) {
+            hiddenCells = [];
+            const totalCells = maxTable * 10;
+            const hideCount = Math.round(totalCells * hidePercent / 100);
+
+            // Build list of all cell coordinates
+            const allCells = [];
+            for (let row = 1; row <= maxTable; row++) {
+                for (let col = 1; col <= 10; col++) {
+                    allCells.push({ row, col });
+                }
+            }
+
+            // Shuffle and pick
+            shuffle(allCells);
+            hiddenCells = allCells.slice(0, hideCount);
+
+            for (const { row, col } of hiddenCells) {
+                const cell = document.getElementById(`cell-${row}-${col}`);
+                cell.className = 'hidden-cell';
+            }
+        }
+
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
+
+        function startQuiz() {
+            const quizArea = document.getElementById('quizArea');
+            quizArea.classList.remove('hidden');
+            document.getElementById('quizInputRow').classList.remove('hidden');
+            document.getElementById('quizSummary').classList.add('hidden');
+
+            // Pick 10 random hidden cells (or fewer if not enough)
+            const available = [...hiddenCells];
+            shuffle(available);
+            quizCells = available.slice(0, Math.min(10, available.length));
+
+            currentQuestion = 0;
+            score = 0;
+            answering = false;
+
+            showQuestion();
+        }
+
+        function showQuestion() {
+            if (currentQuestion >= quizCells.length) {
+                endQuiz();
+                return;
+            }
+
+            const { row, col } = quizCells[currentQuestion];
+
+            // Clear previous highlight
+            document.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
+
+            // Highlight current cell
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            cell.classList.add('highlighted');
+            cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            document.getElementById('quizProgress').textContent =
+                `Vraag ${currentQuestion + 1} van ${quizCells.length}`;
+            document.getElementById('quizQuestion').textContent =
+                `Hoeveel is ${row} \u00d7 ${col}?`;
+            document.getElementById('quizAnswer').value = '';
+            document.getElementById('quizFeedback').textContent = '';
+            document.getElementById('quizFeedback').className = 'quiz-feedback';
+            answering = false;
+
+            setTimeout(() => document.getElementById('quizAnswer').focus(), 50);
+        }
+
+        function submitAnswer() {
+            if (answering) return;
+
+            const input = document.getElementById('quizAnswer');
+            const answer = parseInt(input.value);
+            if (isNaN(answer)) return;
+
+            answering = true;
+
+            const { row, col } = quizCells[currentQuestion];
+            const correct = row * col;
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            const feedback = document.getElementById('quizFeedback');
+
+            cell.classList.remove('highlighted', 'hidden-cell');
+            cell.textContent = correct;
+
+            if (answer === correct) {
+                cell.className = 'correct';
+                feedback.textContent = `Goed! ${row} \u00d7 ${col} = ${correct}`;
+                feedback.className = 'quiz-feedback correct';
+                score++;
+            } else {
+                cell.className = 'wrong';
+                feedback.textContent = `Fout! ${row} \u00d7 ${col} = ${correct} (jij zei ${answer})`;
+                feedback.className = 'quiz-feedback wrong';
+            }
+
+            // Remove this cell from hiddenCells since it's now revealed
+            hiddenCells = hiddenCells.filter(c => !(c.row === row && c.col === col));
+
+            // Auto-advance to next question after a short delay
+            const delay = answer === correct ? 1500 : 4000;
+            setTimeout(() => {
+                currentQuestion++;
+                showQuestion();
+            }, delay);
+        }
+
+        function endQuiz() {
+            document.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
+            document.getElementById('quizQuestion').textContent = 'Quiz klaar!';
+            document.getElementById('quizProgress').textContent = '';
+            document.getElementById('quizInputRow').classList.add('hidden');
+            document.getElementById('quizFeedback').textContent = '';
+
+            const summary = document.getElementById('quizSummary');
+            summary.textContent = `Score: ${score} / ${quizCells.length}`;
+            summary.classList.remove('hidden');
+
+            const maxTable = parseInt(document.getElementById('maxTable').value);
+            const hidePercent = parseInt(document.getElementById('hidePercent').value);
+            saveScore(maxTable, hidePercent, score, quizCells.length);
+            renderHistory();
+        }
+
+        // Allow Enter key to submit
+        document.getElementById('quizAnswer').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitAnswer();
+        });
+    </script>
+</body>
+</html>
