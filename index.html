@@ -462,6 +462,7 @@
         let currentMode = null;
         let activeTables = [];
         let questionStartTime = 0;
+        let currentCellWeights = {};
 
         // Game modes - add new modes here
         const gameModes = [
@@ -492,10 +493,12 @@
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.add('active');
 
-            // Pick 4 random tables from 1-10
+            // Pick 4 tables, biased toward weaker/slower tables
+            const { tableWeights, cellWeights: cw } = computeWeights();
+            currentCellWeights = cw;
             const allTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-            shuffle(allTables);
-            activeTables = allTables.slice(0, 4).sort((a, b) => a - b);
+            const tw = allTables.map(t => tableWeights[t]);
+            activeTables = weightedSample(allTables, tw, 4).sort((a, b) => a - b);
 
             buildGrid(10);
             hideRandomCells(mode.hidePercent);
@@ -522,8 +525,8 @@
                 correct,
                 timeMs
             });
-            // Keep last 500 entries
-            if (questions.length > 500) questions.splice(0, questions.length - 500);
+            // Keep last 1000 entries
+            if (questions.length > 1000) questions.splice(0, questions.length - 1000);
             localStorage.setItem('tafels-questions', JSON.stringify(questions));
         }
 
@@ -716,15 +719,16 @@
 
             // Build list of cell coordinates from active tables only
             const allCells = [];
+            const allWeights = [];
             for (const table of activeTables) {
                 for (let mult = 1; mult <= 10; mult++) {
                     allCells.push({ table, mult });
+                    allWeights.push(currentCellWeights[`${table}-${mult}`] || 1);
                 }
             }
 
-            // Shuffle and pick
-            shuffle(allCells);
-            hiddenCells = allCells.slice(0, hideCount);
+            // Weighted pick: bias toward weaker cells
+            hiddenCells = weightedSample(allCells, allWeights, hideCount);
 
             for (const { table, mult } of hiddenCells) {
                 const cell = document.getElementById(`cell-${table}-${mult}`);
@@ -739,16 +743,97 @@
             }
         }
 
+        // Compute performance weights for tables and individual cells.
+        // Higher weight = more likely to be selected (worse performance).
+        function computeWeights() {
+            const questions = JSON.parse(localStorage.getItem('tafels-questions') || '[]');
+            // Use last 200 entries for recency, so old mistakes fade
+            const recent = questions.slice(-200);
+
+            // Per-table stats
+            const tableStats = {};
+            // Per-cell stats (keyed as "table-mult")
+            const cellStats = {};
+
+            for (let t = 1; t <= 10; t++) {
+                tableStats[t] = { correct: 0, total: 0, totalTime: 0 };
+                for (let m = 1; m <= 10; m++) {
+                    cellStats[`${t}-${m}`] = { correct: 0, total: 0, totalTime: 0 };
+                }
+            }
+
+            for (const q of recent) {
+                const t = q.table || q.row;
+                const m = q.mult;
+                if (!t || !m || !tableStats[t]) continue;
+
+                tableStats[t].total++;
+                if (q.correct) tableStats[t].correct++;
+                if (q.timeMs != null) tableStats[t].totalTime += q.timeMs;
+
+                const key = `${t}-${m}`;
+                cellStats[key].total++;
+                if (q.correct) cellStats[key].correct++;
+                if (q.timeMs != null) cellStats[key].totalTime += q.timeMs;
+            }
+
+            // Compute weight for a stats object
+            function weight(s) {
+                const BASE = 1.0;
+                if (s.total < 3) return BASE + 3.0; // No-data bonus
+
+                const accuracy = s.correct / s.total;
+                const avgTime = s.totalTime / s.total;
+                const errorPenalty = (1 - accuracy) * 4;
+                const slowPenalty = Math.min(avgTime / 3000, 2);
+                return BASE + errorPenalty + slowPenalty;
+            }
+
+            const tableWeights = {};
+            for (let t = 1; t <= 10; t++) {
+                tableWeights[t] = weight(tableStats[t]);
+            }
+
+            const cellWeights = {};
+            for (const key in cellStats) {
+                cellWeights[key] = weight(cellStats[key]);
+            }
+
+            return { tableWeights, cellWeights };
+        }
+
+        // Weighted random sampling without replacement.
+        // items: array, weights: array of same length, n: how many to pick.
+        function weightedSample(items, weights, n) {
+            const picked = [];
+            const remaining = items.map((item, i) => ({ item, weight: weights[i] }));
+
+            for (let i = 0; i < n && remaining.length > 0; i++) {
+                const totalWeight = remaining.reduce((sum, r) => sum + r.weight, 0);
+                let rand = Math.random() * totalWeight;
+                let idx = 0;
+                for (idx = 0; idx < remaining.length; idx++) {
+                    rand -= remaining[idx].weight;
+                    if (rand <= 0) break;
+                }
+                idx = Math.min(idx, remaining.length - 1);
+                picked.push(remaining[idx].item);
+                remaining.splice(idx, 1);
+            }
+
+            return picked;
+        }
+
         function startQuiz() {
             const quizArea = document.getElementById('quizArea');
             quizArea.classList.remove('hidden');
             document.getElementById('quizInputRow').classList.remove('hidden');
             document.getElementById('quizSummary').classList.add('hidden');
 
-            // Pick 10 random hidden cells (or fewer if not enough)
+            // Pick 10 hidden cells, biased toward weaker cells
             const available = [...hiddenCells];
-            shuffle(available);
-            quizCells = available.slice(0, Math.min(10, available.length));
+            const quizWeights = available.map(c => currentCellWeights[`${c.table}-${c.mult}`] || 1);
+            quizCells = weightedSample(available, quizWeights, Math.min(10, available.length));
 
             currentQuestion = 0;
             score = 0;
