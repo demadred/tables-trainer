@@ -188,7 +188,7 @@
             color: #2c3e50;
         }
         .history-section {
-            flex: 1;
+            flex: 1 1 100%;
             min-width: 0;
             padding: 16px;
             background: #fff;
@@ -260,6 +260,7 @@
             display: flex;
             gap: 24px;
             align-items: flex-start;
+            flex-wrap: wrap;
         }
 
         .chart-section {
@@ -328,6 +329,61 @@
             font-size: 13px;
             font-weight: 400;
             color: #a0aec0;
+        }
+
+        .scatter-section {
+            flex: 1 1 400px;
+            min-width: 320px;
+            padding: 16px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .scatter-section.hidden {
+            display: none;
+        }
+
+        .scatter-section h2 {
+            font-size: 18px;
+            color: #2c3e50;
+            margin-bottom: 12px;
+        }
+
+        .scatter-buttons {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .scatter-btn {
+            width: 30px;
+            height: 26px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #fff;
+            color: #4a5568;
+            transition: border-color 0.15s, background 0.15s;
+            padding: 0;
+        }
+
+        .scatter-btn:hover {
+            border-color: #a0aec0;
+        }
+
+        .scatter-btn.active {
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .scatter-canvas {
+            width: 100%;
+            aspect-ratio: 1.2;
+            display: block;
         }
 
         .start-screen.hidden {
@@ -415,6 +471,12 @@
 
                 <h2 class="chart-time-title">Gemiddelde tijd per tafel</h2>
                 <div class="bar-chart" id="timeChart"></div>
+            </div>
+
+            <div class="scatter-section hidden" id="scatterSection">
+                <h2>Voortgang per tafel</h2>
+                <div class="scatter-buttons" id="scatterButtons"></div>
+                <canvas class="scatter-canvas" id="scatterCanvas"></canvas>
             </div>
 
             <div class="history-section hidden" id="historySection">
@@ -511,6 +573,7 @@
             document.getElementById('quizArea').classList.add('hidden');
             document.getElementById('grid').innerHTML = '';
             renderChart();
+            renderScatter();
             renderHistory();
         }
 
@@ -669,8 +732,269 @@
             }
         }
 
+        // Table colors for the scatterplot (1-10)
+        const TABLE_COLORS = [
+            '#e53e3e', '#dd6b20', '#d69e2e', '#38a169', '#319795',
+            '#3182ce', '#5a67d8', '#805ad5', '#d53f8c', '#718096'
+        ];
+
+        let scatterHighlight = null; // null = show all, 1-10 = highlight one
+
+        function toggleScatterHighlight(t) {
+            scatterHighlight = (scatterHighlight === t) ? null : t;
+            renderScatterButtons();
+            renderScatterCanvas();
+        }
+
+        function renderScatterButtons() {
+            const container = document.getElementById('scatterButtons');
+            container.innerHTML = '';
+            for (let t = 1; t <= 10; t++) {
+                const btn = document.createElement('button');
+                btn.className = 'scatter-btn';
+                btn.textContent = t;
+                const color = TABLE_COLORS[t - 1];
+                if (scatterHighlight === t) {
+                    btn.classList.add('active');
+                    btn.style.background = color;
+                    btn.style.borderColor = color;
+                } else {
+                    btn.style.borderColor = scatterHighlight === null ? color : '#e2e8f0';
+                    btn.style.color = scatterHighlight === null ? color : '#cbd5e0';
+                }
+                btn.onclick = () => toggleScatterHighlight(t);
+                container.appendChild(btn);
+            }
+        }
+
+        function renderScatter() {
+            const questions = JSON.parse(localStorage.getItem('tafels-questions') || '[]');
+            const section = document.getElementById('scatterSection');
+
+            if (questions.length === 0) {
+                section.classList.add('hidden');
+                return;
+            }
+            section.classList.remove('hidden');
+            scatterHighlight = null;
+            renderScatterButtons();
+            renderScatterCanvas();
+        }
+
+        function renderScatterCanvas() {
+            const questions = JSON.parse(localStorage.getItem('tafels-questions') || '[]');
+            const canvas = document.getElementById('scatterCanvas');
+
+            // Hi-DPI support
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            const W = rect.width;
+            const H = rect.height;
+
+            // Chart area with margins for labels
+            const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+            const plotW = W - margin.left - margin.right;
+            const plotH = H - margin.top - margin.bottom;
+
+            // Axis mapping: X = accuracy (0-100%), Y = avg time (2s-10s, inverted: fast at top)
+            const X_MIN = 0, X_MAX = 100;   // accuracy %
+            const Y_MIN = 2000, Y_MAX = 10000; // ms (2s = top/best, 10s = bottom/worst)
+
+            function toCanvasX(accuracy) {
+                return margin.left + (accuracy - X_MIN) / (X_MAX - X_MIN) * plotW;
+            }
+            function toCanvasY(avgMs) {
+                // Clamp to range, invert so fast is at top
+                const clamped = Math.max(Y_MIN, Math.min(Y_MAX, avgMs));
+                const ratio = (clamped - Y_MIN) / (Y_MAX - Y_MIN);
+                return margin.top + ratio * plotH; // low ms = top
+            }
+
+            // Clear
+            ctx.clearRect(0, 0, W, H);
+
+            // Draw "perfect zone" background (top-right quadrant: >80% accuracy, <4s)
+            ctx.fillStyle = 'rgba(72, 187, 120, 0.07)';
+            const pzX = toCanvasX(80);
+            const pzY = margin.top;
+            const pzW = toCanvasX(100) - pzX;
+            const pzH = toCanvasY(4000) - pzY;
+            ctx.fillRect(pzX, pzY, pzW, pzH);
+
+            // Grid lines
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            // Vertical grid (accuracy: 0, 20, 40, 60, 80, 100)
+            for (let a = 0; a <= 100; a += 20) {
+                const x = toCanvasX(a);
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + plotH);
+                ctx.stroke();
+            }
+            // Horizontal grid (time: 2s, 4s, 6s, 8s, 10s)
+            for (let t = 2000; t <= 10000; t += 2000) {
+                const y = toCanvasY(t);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+
+            // Axes
+            ctx.strokeStyle = '#a0aec0';
+            ctx.lineWidth = 1.5;
+            // X axis
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top + plotH);
+            ctx.lineTo(margin.left + plotW, margin.top + plotH);
+            ctx.stroke();
+            // Y axis
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + plotH);
+            ctx.stroke();
+
+            // Axis labels
+            ctx.fillStyle = '#4a5568';
+            ctx.font = '11px Segoe UI, sans-serif';
+            ctx.textAlign = 'center';
+            for (let a = 0; a <= 100; a += 20) {
+                ctx.fillText(a + '%', toCanvasX(a), margin.top + plotH + 16);
+            }
+            ctx.fillText('Score', margin.left + plotW / 2, margin.top + plotH + 34);
+
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (let t = 2000; t <= 10000; t += 2000) {
+                ctx.fillText((t / 1000) + 's', margin.left - 8, toCanvasY(t));
+            }
+
+            ctx.save();
+            ctx.translate(14, margin.top + plotH / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = 'center';
+            ctx.fillText('Snelheid', 0, 0);
+            ctx.restore();
+
+            // Build rolling window snapshots per table.
+            // Use a sliding window that grows from the start of the history,
+            // always including all questions up to that point — so each snapshot
+            // represents "performance as of question N".
+            const TARGET_SNAPSHOTS = 8; // aim for ~8 trail points
+
+            // Group questions by table, preserving chronological order
+            const perTable = {};
+            for (let t = 1; t <= 10; t++) perTable[t] = [];
+            for (const q of questions) {
+                const t = q.table || q.row;
+                if (t >= 1 && t <= 10) perTable[t].push(q);
+            }
+
+            // For each table, compute cumulative snapshots
+            for (let t = 1; t <= 10; t++) {
+                const qs = perTable[t];
+                if (qs.length < 3) continue; // need minimum data
+
+                const snapshots = [];
+                // Determine step so we get roughly TARGET_SNAPSHOTS points
+                const step = Math.max(1, Math.floor(qs.length / TARGET_SNAPSHOTS));
+
+                for (let end = step; end <= qs.length; end += step) {
+                    // Use a trailing window: last min(50, end) questions up to this point
+                    const winStart = Math.max(0, end - 50);
+                    const window = qs.slice(winStart, end);
+
+                    let correct = 0, totalTime = 0, timeCount = 0;
+                    for (const q of window) {
+                        if (q.correct) correct++;
+                        if (q.timeMs != null) {
+                            totalTime += Math.min(q.timeMs, 10000);
+                            timeCount++;
+                        }
+                    }
+
+                    const accuracy = (correct / window.length) * 100;
+                    const avgTime = timeCount > 0 ? totalTime / timeCount : 6000;
+                    snapshots.push({ accuracy, avgTime });
+                }
+
+                // Always include a final snapshot using all remaining questions
+                if (qs.length % step !== 0 || snapshots.length === 0) {
+                    const winStart = Math.max(0, qs.length - 50);
+                    const window = qs.slice(winStart);
+                    let correct = 0, totalTime = 0, timeCount = 0;
+                    for (const q of window) {
+                        if (q.correct) correct++;
+                        if (q.timeMs != null) {
+                            totalTime += Math.min(q.timeMs, 10000);
+                            timeCount++;
+                        }
+                    }
+                    snapshots.push({
+                        accuracy: (correct / window.length) * 100,
+                        avgTime: timeCount > 0 ? totalTime / timeCount : 6000
+                    });
+                }
+
+                const color = TABLE_COLORS[t - 1];
+                const highlighted = scatterHighlight === null || scatterHighlight === t;
+                const dimFactor = highlighted ? 1 : 0.1;
+
+                // Draw trail (connecting line with fading opacity)
+                if (snapshots.length > 1) {
+                    for (let i = 1; i < snapshots.length; i++) {
+                        const opacity = (0.1 + 0.5 * (i / (snapshots.length - 1))) * dimFactor;
+                        ctx.strokeStyle = color;
+                        ctx.globalAlpha = opacity;
+                        ctx.lineWidth = highlighted ? 2 : 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(toCanvasX(snapshots[i - 1].accuracy), toCanvasY(snapshots[i - 1].avgTime));
+                        ctx.lineTo(toCanvasX(snapshots[i].accuracy), toCanvasY(snapshots[i].avgTime));
+                        ctx.stroke();
+                    }
+
+                    // Draw trail dots (small, fading)
+                    for (let i = 0; i < snapshots.length - 1; i++) {
+                        const opacity = (0.15 + 0.4 * (i / (snapshots.length - 1))) * dimFactor;
+                        ctx.globalAlpha = opacity;
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(toCanvasX(snapshots[i].accuracy), toCanvasY(snapshots[i].avgTime), 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // Draw current dot (full opacity, larger)
+                const current = snapshots[snapshots.length - 1];
+                const dotRadius = highlighted ? 7 : 6;
+                ctx.globalAlpha = dimFactor;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(toCanvasX(current.accuracy), toCanvasY(current.avgTime), dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Label the dot with table number
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 9px Segoe UI, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(t, toCanvasX(current.accuracy), toCanvasY(current.avgTime));
+            }
+
+            ctx.globalAlpha = 1;
+        }
+
         renderModes();
         renderChart();
+        renderScatter();
         renderHistory();
 
         function buildGrid(maxTable) {
