@@ -67,14 +67,14 @@
 
         td.hidden-cell {
             background: #e2e8f0;
-            color: #e2e8f0;
+            color: transparent;
         }
 
         td.highlighted {
             background: #fefcbf;
             outline: 3px solid #d69e2e;
             outline-offset: -2px;
-            color: #fefcbf;
+            color: transparent;
             font-weight: 700;
             transform: scale(1.05);
             z-index: 1;
@@ -386,6 +386,52 @@
             display: block;
         }
 
+        .about-section {
+            margin-top: 24px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 4px 16px;
+        }
+
+        .about-section summary {
+            font-size: 15px;
+            font-weight: 600;
+            color: #718096;
+            cursor: pointer;
+            padding: 12px 0;
+            list-style: none;
+        }
+
+        .about-section summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .about-section summary::before {
+            content: '+ ';
+            font-weight: 700;
+        }
+
+        .about-section[open] summary::before {
+            content: '- ';
+        }
+
+        .about-content p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+
+        .about-content p:last-child {
+            margin-bottom: 16px;
+        }
+
+        .about-disclaimer {
+            font-style: italic;
+            color: #a0aec0 !important;
+        }
+
         .start-screen.hidden {
             display: none;
         }
@@ -485,12 +531,51 @@
                 </div>
                 <table class="history-table">
                     <thead>
-                        <tr><th>Datum</th><th>Modus</th><th>Tafels</th><th>Verborgen</th><th>Score</th></tr>
+                        <tr><th>Datum</th><th>Modus</th><th>Score</th></tr>
                     </thead>
                     <tbody id="historyBody"></tbody>
                 </table>
             </div>
         </div>
+
+        <details class="about-section">
+            <summary>Hoe werkt het?</summary>
+            <div class="about-content">
+                <p>
+                    Tafels Trainer is gebouwd om tafels te oefenen door herhaling, niet door berekening.
+                    Het doel is dat de antwoorden vanzelf komen &mdash; uit het geheugen, niet door
+                    stap voor stap te rekenen. Daarom meten we snelheid: een antwoord binnen 2 seconden
+                    betekent dat je het gewoon <em>weet</em>. Alles boven de 10 seconden telt als
+                    &ldquo;nog niet geleerd&rdquo; &mdash; dan ben je aan het rekenen, niet aan het herinneren.
+                </p>
+                <p>
+                    De tafels en vragen worden niet helemaal willekeurig gekozen. Het programma kijkt
+                    naar waar je het langzaamst bent en de meeste fouten maakt, en laat die vaker
+                    terugkomen. Maar niet alleen die &mdash; ook tafels waar je al goed in bent komen
+                    af en toe voorbij, zodat je ze niet verleerd. Tafels die je nog nauwelijks hebt
+                    geoefend krijgen ook extra aandacht.
+                </p>
+                <p>
+                    We beginnen bewust met alle tafels van 1 tot 10, ook de moeilijke. Er wordt niet
+                    langzaam opgebouwd via makkelijke tafels eerst. Het idee is dat je alles gewoon
+                    probeert en het programma zich aanpast aan wat jij nodig hebt.
+                </p>
+                <p>
+                    De modus <strong>Drie op een rij</strong> traint het opzeggen van een reeks
+                    &mdash; zoals je een tafel hardop zou opzeggen. Steeds drie opeenvolgende sommen
+                    uit dezelfde tafel, zodat het ritme en de volgorde ook in je geheugen komen.
+                </p>
+                <p>
+                    De voortgangsgrafiek laat per tafel zien hoe je score en snelheid zich over tijd
+                    ontwikkelen. Het doel is om alle tafels naar de groene zone rechtsboven te krijgen:
+                    hoge score, snel antwoord.
+                </p>
+                <p class="about-disclaimer">
+                    Dit is geen lesmethode en niet gebaseerd op didactische theorie. Het is gewoon een
+                    poging om iets te maken waarmee een kind kan oefenen en vooruitgang kan zien.
+                </p>
+            </div>
+        </details>
     </div>
 
     <!-- Game Screen -->
@@ -528,9 +613,10 @@
 
         // Game modes - add new modes here
         const gameModes = [
-            { id: 'easy',   icon: '🌱', title: 'Makkelijk',  desc: '20% verborgen',  maxTable: 10, hidePercent: 20 },
-            { id: 'normal', icon: '📐', title: 'Normaal',     desc: '40% verborgen',  maxTable: 10, hidePercent: 40 },
-            { id: 'hard',   icon: '🔥', title: 'Moeilijk',    desc: '70% verborgen',  maxTable: 10, hidePercent: 70 },
+            { id: 'easy',   icon: '🌱', title: 'Makkelijk',      desc: '20% verborgen',  maxTable: 10, hidePercent: 20 },
+            { id: 'normal', icon: '📐', title: 'Normaal',         desc: '40% verborgen',  maxTable: 10, hidePercent: 40 },
+            { id: 'hard',   icon: '🔥', title: 'Moeilijk',        desc: '70% verborgen',  maxTable: 10, hidePercent: 70 },
+            { id: 'triple', icon: '🔗', title: 'Drie op een rij', desc: '4×3 reeksen',    maxTable: 10, threeInARow: true },
         ];
 
         // Render mode tiles
@@ -555,16 +641,107 @@
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('gameScreen').classList.add('active');
 
-            // Pick 4 tables, biased toward weaker/slower tables
             const { tableWeights, cellWeights: cw } = computeWeights();
             currentCellWeights = cw;
-            const allTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-            const tw = allTables.map(t => tableWeights[t]);
-            activeTables = weightedSample(allTables, tw, 4).sort((a, b) => a - b);
+
+            if (mode.threeInARow) {
+                selectThreeInARow(tableWeights);
+            } else {
+                // Pick 4 tables, biased toward weaker/slower tables
+                const allTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+                const tw = allTables.map(t => tableWeights[t]);
+                activeTables = weightedSample(allTables, tw, 4).sort((a, b) => a - b);
+
+                buildGrid(10);
+                hideRandomCells(mode.hidePercent);
+                startQuiz();
+            }
+        }
+
+        function selectThreeInARow(tableWeights) {
+            // Build all possible triplets: (table, startMult) where startMult 1-8
+            // so the series is startMult, startMult+1, startMult+2 (all <= 10)
+            const allTriplets = [];
+            const tripletWeights = [];
+            for (let t = 1; t <= 10; t++) {
+                for (let m = 1; m <= 8; m++) {
+                    allTriplets.push({ table: t, startMult: m });
+                    // Weight is the sum of the 3 cell weights
+                    const w = (currentCellWeights[`${t}-${m}`] || 1)
+                            + (currentCellWeights[`${t}-${m+1}`] || 1)
+                            + (currentCellWeights[`${t}-${m+2}`] || 1);
+                    tripletWeights.push(w);
+                }
+            }
+
+            // Pick 4 non-overlapping triplets via weighted sampling
+            const picked = [];
+            const remaining = allTriplets.map((tr, i) => ({ triplet: tr, weight: tripletWeights[i], idx: i }));
+
+            for (let i = 0; i < 4 && remaining.length > 0; i++) {
+                const totalWeight = remaining.reduce((sum, r) => sum + r.weight, 0);
+                let rand = Math.random() * totalWeight;
+                let pick = 0;
+                for (pick = 0; pick < remaining.length; pick++) {
+                    rand -= remaining[pick].weight;
+                    if (rand <= 0) break;
+                }
+                pick = Math.min(pick, remaining.length - 1);
+                const chosen = remaining[pick].triplet;
+                picked.push(chosen);
+
+                // Remove all triplets that overlap with the chosen one
+                const chosenCells = new Set([
+                    `${chosen.table}-${chosen.startMult}`,
+                    `${chosen.table}-${chosen.startMult+1}`,
+                    `${chosen.table}-${chosen.startMult+2}`
+                ]);
+                for (let j = remaining.length - 1; j >= 0; j--) {
+                    const r = remaining[j].triplet;
+                    if (chosenCells.has(`${r.table}-${r.startMult}`)
+                     || chosenCells.has(`${r.table}-${r.startMult+1}`)
+                     || chosenCells.has(`${r.table}-${r.startMult+2}`)) {
+                        remaining.splice(j, 1);
+                    }
+                }
+            }
+
+            // Determine which tables are involved
+            const tableSet = new Set(picked.map(p => p.table));
+            activeTables = [...tableSet].sort((a, b) => a - b);
 
             buildGrid(10);
-            hideRandomCells(mode.hidePercent);
-            startQuiz();
+
+            // Hide exactly the 12 triplet cells
+            hiddenCells = [];
+            for (const { table, startMult } of picked) {
+                for (let d = 0; d < 3; d++) {
+                    const mult = startMult + d;
+                    hiddenCells.push({ table, mult });
+                    const cell = document.getElementById(`cell-${table}-${mult}`);
+                    cell.className = 'hidden-cell';
+                    cell.textContent = '';
+                }
+            }
+
+            // Quiz cells are all 12 in series order (series shuffled, but within each series sequential)
+            shuffle(picked);
+            quizCells = [];
+            for (const { table, startMult } of picked) {
+                for (let d = 0; d < 3; d++) {
+                    quizCells.push({ table, mult: startMult + d });
+                }
+            }
+
+            // Start the quiz directly (bypass startQuiz's random selection)
+            const quizArea = document.getElementById('quizArea');
+            quizArea.classList.remove('hidden');
+            document.getElementById('quizInputRow').classList.remove('hidden');
+            document.getElementById('quizSummary').classList.add('hidden');
+            currentQuestion = 0;
+            score = 0;
+            answering = false;
+            showQuestion();
         }
 
         function backToStart() {
@@ -623,7 +800,7 @@
                 const h = history[i];
                 const tr = document.createElement('tr');
                 const pct = Math.round(h.score / h.total * 100);
-                tr.innerHTML = `<td>${h.date}</td><td>${h.mode || '-'}</td><td>${h.maxTable}</td><td>${h.hidePercent}%</td><td class="${pct === 100 ? 'perfect' : pct >= 70 ? 'good' : 'poor'}">${h.score} / ${h.total}</td>`;
+                tr.innerHTML = `<td>${h.date}</td><td>${h.mode || '-'}</td><td class="${pct === 100 ? 'perfect' : pct >= 70 ? 'good' : 'poor'}">${h.score} / ${h.total}</td>`;
                 container.appendChild(tr);
             }
         }
@@ -1057,6 +1234,7 @@
             for (const { table, mult } of hiddenCells) {
                 const cell = document.getElementById(`cell-${table}-${mult}`);
                 cell.className = 'hidden-cell';
+                cell.textContent = '';
             }
         }
 
@@ -1248,5 +1426,8 @@
             if (e.key === 'Enter') submitAnswer();
         });
     </script>
+    <footer style="text-align:center;margin-top:40px;padding:16px;color:#a0aec0;font-size:13px;">
+        <a href="https://github.com/demadred/tables-trainer" target="_blank" rel="noopener" style="color:#718096;text-decoration:none;">GitHub</a>
+    </footer>
 </body>
 </html>
